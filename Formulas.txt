@@ -1,0 +1,42 @@
+BVPS = Total Shareholders' Equity / Shares Outstanding
+
+Book Value Per Share (BVPS)
+CopyInsert
+BVPS = Total Shareholders' Equity / Shares Outstanding
+With Alpha Vantage data: totalShareholderEquity / commonStockSharesOutstanding
+
+With FMP data: We're using two approaches:
+
+When common stock value is available: (totalStockholdersEquity - commonStock) / sharesOutstanding
+Simple version: totalStockholdersEquity / sharesOutstanding
+Debt-to-Equity Ratio
+CopyInsert
+Debt-to-Equity = Total Liabilities / Total Shareholders' Equity
+With Alpha Vantage data: totalLiabilities / totalShareholderEquity
+
+With FMP data: totalLiabilities / totalStockholdersEquity
+
+Return on Invested Capital (ROIC)
+CopyInsert
+ROIC = NOPAT / Invested Capital
+Where:
+
+NOPAT (Net Operating Profit After Tax) = EBIT × (1 - Tax Rate)
+Tax Rate = Income Tax Expense / Income Before Tax
+Invested Capital = Total Equity + Total Debt - Cash
+With Alpha Vantage data:
+
+EBIT from income statement
+Tax calculation from income tax expense and income before tax
+Invested capital combines equity, debt, and cash from balance sheet
+With FMP data:
+
+Similar calculation but when EBIT isn't available, we fall back to using Net Income as an approximation for NOPAT
+Dividend Yield
+The dividend yield is obtained directly from the API:
+
+CopyInsert
+Dividend Yield = Annual Dividend / Current Price
+In our code, we simply display the lastDiv value from the Financial Modeling Prep API, which already contains the calculated dividend yield.
+
+These ratios provide important insights into a company's financial health, profitability, and valuation from multiple perspectives.
