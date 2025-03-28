@@ -105,6 +105,11 @@
             $alphaVantageBalanceSheetResponse = file_get_contents($alphaVantageBalanceSheetUrl);
             $alphaVantageBalanceSheetData = json_decode($alphaVantageBalanceSheetResponse, true);
             
+            // Get income statement data from Alpha Vantage for ROIC
+            $alphaVantageIncomeStatementUrl = "https://www.alphavantage.co/query?function=INCOME_STATEMENT&symbol=$symbol&apikey=$alphaVantageApiKey";
+            $alphaVantageIncomeStatementResponse = file_get_contents($alphaVantageIncomeStatementUrl);
+            $alphaVantageIncomeStatementData = json_decode($alphaVantageIncomeStatementResponse, true);
+            
             // Get balance sheet data for Debt-to-Equity from FMP
             $balanceSheetUrl = "https://financialmodelingprep.com/api/v3/balance-sheet-statement/$symbol?limit=1&apikey=$fmpApiKey";
             $balanceSheetResponse = file_get_contents($balanceSheetUrl);
@@ -120,6 +125,8 @@
             $debtToEquity = 0;
             $roic = 0;
             $bvpsSource = 'N/A'; // To track which API provided the BVPS data
+            $roicSource = 'N/A'; // To track which API provided the ROIC data
+            $debtToEquitySource = 'N/A'; // To track which API provided the Debt-to-Equity data
             
             // Try to calculate BVPS from Alpha Vantage data first
             if (!empty($alphaVantageBalanceSheetData) && isset($alphaVantageBalanceSheetData['annualReports']) && 
@@ -147,43 +154,94 @@
                 }
             }
             
-            // Continue with other calculations using FMP data
-            if (!empty($balanceSheetData) && is_array($balanceSheetData) && count($balanceSheetData) > 0) {
-                $balanceSheet = $balanceSheetData[0];
+            // Try to calculate Debt-to-Equity and ROIC using Alpha Vantage data
+            if (!empty($alphaVantageBalanceSheetData) && isset($alphaVantageBalanceSheetData['annualReports']) && 
+                is_array($alphaVantageBalanceSheetData['annualReports']) && count($alphaVantageBalanceSheetData['annualReports']) > 0) {
                 
-                // Debt-to-Equity Ratio
-                if (isset($balanceSheet['totalLiabilities']) && isset($balanceSheet['totalStockholdersEquity']) && 
-                    $balanceSheet['totalStockholdersEquity'] > 0) {
-                    $debtToEquity = $balanceSheet['totalLiabilities'] / $balanceSheet['totalStockholdersEquity'];
+                $balanceSheetReport = $alphaVantageBalanceSheetData['annualReports'][0];
+                
+                // Calculate Debt-to-Equity Ratio using Alpha Vantage data
+                if (isset($balanceSheetReport['totalLiabilities']) && isset($balanceSheetReport['totalShareholderEquity']) && 
+                    floatval($balanceSheetReport['totalShareholderEquity']) > 0) {
+                    $debtToEquity = floatval($balanceSheetReport['totalLiabilities']) / floatval($balanceSheetReport['totalShareholderEquity']);
+                    $debtToEquitySource = 'Alpha Vantage';
                 }
                 
-                // Partial ROIC calculation - need income statement for the rest
-                if (!empty($incomeStatementData) && is_array($incomeStatementData) && count($incomeStatementData) > 0) {
-                    $incomeStatement = $incomeStatementData[0];
+                // ROIC calculation (if income statement data is available)
+                if (!empty($alphaVantageIncomeStatementData) && isset($alphaVantageIncomeStatementData['annualReports']) && 
+                    is_array($alphaVantageIncomeStatementData['annualReports']) && count($alphaVantageIncomeStatementData['annualReports']) > 0) {
+                    
+                    $incomeStatementReport = $alphaVantageIncomeStatementData['annualReports'][0];
+                    
+                    // Extract components for ROIC calculation
+                    $ebit = isset($incomeStatementReport['ebit']) ? floatval($incomeStatementReport['ebit']) : 0;
+                    $incomeTaxExpense = isset($incomeStatementReport['incomeTaxExpense']) ? floatval($incomeStatementReport['incomeTaxExpense']) : 0;
+                    $incomeBeforeTax = isset($incomeStatementReport['incomeBeforeTax']) ? floatval($incomeStatementReport['incomeBeforeTax']) : 0;
+                    $totalEquity = isset($balanceSheetReport['totalShareholderEquity']) ? floatval($balanceSheetReport['totalShareholderEquity']) : 0;
+                    $shortTermDebt = isset($balanceSheetReport['shortTermDebt']) ? floatval($balanceSheetReport['shortTermDebt']) : 0;
+                    $longTermDebt = isset($balanceSheetReport['longTermDebt']) ? floatval($balanceSheetReport['longTermDebt']) : 0;
+                    $cash = isset($balanceSheetReport['cashAndCashEquivalentsAtCarryingValue']) ? floatval($balanceSheetReport['cashAndCashEquivalentsAtCarryingValue']) : 0;
                     
                     // Calculate tax rate
-                    $taxRate = 0;
-                    if (isset($incomeStatement['incomeTaxExpense']) && isset($incomeStatement['incomeBeforeTax']) && 
-                        $incomeStatement['incomeBeforeTax'] > 0) {
-                        $taxRate = $incomeStatement['incomeTaxExpense'] / $incomeStatement['incomeBeforeTax'];
-                    }
+                    $taxRate = ($incomeBeforeTax > 0) ? $incomeTaxExpense / $incomeBeforeTax : 0;
                     
-                    // Calculate NOPAT (Net Operating Profit After Tax)
-                    $nopat = 0;
-                    if (isset($incomeStatement['ebit'])) {
-                        $nopat = $incomeStatement['ebit'] * (1 - $taxRate);
-                    }
+                    // Calculate NOPAT
+                    $nopat = $ebit * (1 - $taxRate);
                     
                     // Calculate Invested Capital
-                    $investedCapital = 0;
-                    if (isset($balanceSheet['totalDebt']) && isset($balanceSheet['totalStockholdersEquity']) && 
-                        isset($balanceSheet['cashAndCashEquivalents'])) {
-                        $investedCapital = $balanceSheet['totalDebt'] + $balanceSheet['totalStockholdersEquity'] - $balanceSheet['cashAndCashEquivalents'];
-                    }
+                    $totalDebt = $shortTermDebt + $longTermDebt;
+                    $investedCapital = $totalEquity + $totalDebt - $cash;
                     
                     // Calculate ROIC
                     if ($investedCapital > 0) {
                         $roic = $nopat / $investedCapital;
+                        $roicSource = 'Alpha Vantage';
+                    }
+                }
+            }
+            
+            // If ROIC couldn't be calculated from Alpha Vantage, try using FMP data as fallback
+            if ($roic == 0 || $debtToEquity == 0) {
+                // Continue with other calculations using FMP data
+                if (!empty($balanceSheetData) && is_array($balanceSheetData) && count($balanceSheetData) > 0) {
+                    $balanceSheet = $balanceSheetData[0];
+                    
+                    // Debt-to-Equity Ratio using FMP data if not already calculated
+                    if ($debtToEquity == 0 && isset($balanceSheet['totalLiabilities']) && isset($balanceSheet['totalStockholdersEquity']) && 
+                        $balanceSheet['totalStockholdersEquity'] > 0) {
+                        $debtToEquity = $balanceSheet['totalLiabilities'] / $balanceSheet['totalStockholdersEquity'];
+                        $debtToEquitySource = 'Financial Modeling Prep';
+                    }
+                    
+                    // Calculate ROIC using FMP data if not already calculated
+                    if ($roic == 0 && !empty($incomeStatementData) && is_array($incomeStatementData) && count($incomeStatementData) > 0) {
+                        $incomeStatement = $incomeStatementData[0];
+                        
+                        // Calculate tax rate
+                        $taxRate = 0;
+                        if (isset($incomeStatement['incomeTaxExpense']) && isset($incomeStatement['incomeBeforeTax']) && 
+                            $incomeStatement['incomeBeforeTax'] > 0) {
+                            $taxRate = $incomeStatement['incomeTaxExpense'] / $incomeStatement['incomeBeforeTax'];
+                        }
+                        
+                        // Calculate NOPAT (Net Operating Profit After Tax)
+                        $nopat = 0;
+                        if (isset($incomeStatement['ebit'])) {
+                            $nopat = $incomeStatement['ebit'] * (1 - $taxRate);
+                        }
+                        
+                        // Calculate Invested Capital
+                        $investedCapital = 0;
+                        if (isset($balanceSheet['totalDebt']) && isset($balanceSheet['totalStockholdersEquity']) && 
+                            isset($balanceSheet['cashAndCashEquivalents'])) {
+                            $investedCapital = $balanceSheet['totalDebt'] + $balanceSheet['totalStockholdersEquity'] - $balanceSheet['cashAndCashEquivalents'];
+                        }
+                        
+                        // Calculate ROIC
+                        if ($investedCapital > 0) {
+                            $roic = $nopat / $investedCapital;
+                            $roicSource = 'Financial Modeling Prep';
+                        }
                     }
                 }
             }
@@ -322,12 +380,30 @@
                                         </tr>
                                         <tr>
                                             <th>Debt-to-Equity Ratio</th>
-                                            <td><?php echo $debtToEquity > 0 ? number_format($debtToEquity, 2) : 'N/A'; ?></td>
+                                            <td>
+                                                <?php 
+                                                if ($debtToEquity > 0) {
+                                                    echo number_format($debtToEquity, 2);
+                                                    echo ' <small class="text-muted">(' . $debtToEquitySource . ')</small>';
+                                                } else {
+                                                    echo 'N/A';
+                                                }
+                                                ?>
+                                            </td>
                                             <td><small class="text-muted">Measures financial leverage and company risk</small></td>
                                         </tr>
                                         <tr>
                                             <th>Return on Invested Capital (ROIC)</th>
-                                            <td><?php echo $roic > 0 ? number_format($roic * 100, 2) . '%' : 'N/A'; ?></td>
+                                            <td>
+                                                <?php 
+                                                if ($roic > 0) {
+                                                    echo number_format($roic * 100, 2) . '%';
+                                                    echo ' <small class="text-muted">(' . $roicSource . ')</small>';
+                                                } else {
+                                                    echo 'N/A';
+                                                }
+                                                ?>
+                                            </td>
                                             <td><small class="text-muted">Profitability relative to capital invested</small></td>
                                         </tr>
                                     </tbody>
