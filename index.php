@@ -55,7 +55,7 @@
 <body>
     <div class="container">
         <h1 class="text-center mb-4">
-            <i class="fas fa-chart-line me-2"></i>CheckMyStock
+            <i class="fas fa-chart-line me-2"></i>CheckMyStock - ALPHA v1.0.0
         </h1>
         
         <div class="search-container">
@@ -87,17 +87,106 @@
         <?php
         if (isset($_GET['symbol'])) {
             $symbol = strtoupper(trim($_GET['symbol']));
-            $apiKey = 'TS7dAXGizXA4HhENFsDpWK3jpvZWuNM1'; // replace with your actual API key
+            $fmpApiKey = 'TS7dAXGizXA4HhENFsDpWK3jpvZWuNM1'; // Financial Modeling Prep API key
+            $alphaVantageApiKey = 'Z8027PQP429B5SMI'; // Alpha Vantage API key
             
-            // Get stock profile information
-            $profileUrl = "https://financialmodelingprep.com/api/v3/profile/$symbol?apikey=$apiKey";
+            // Get stock profile information from FMP
+            $profileUrl = "https://financialmodelingprep.com/api/v3/profile/$symbol?apikey=$fmpApiKey";
             $profileResponse = file_get_contents($profileUrl);
             $profileData = json_decode($profileResponse, true);
             
-            // Get similar stocks (aliases)
-            $symbolsUrl = "https://financialmodelingprep.com/api/v3/stock/similar/$symbol?apikey=$apiKey";
+            // Get similar stocks (aliases) from FMP
+            $symbolsUrl = "https://financialmodelingprep.com/api/v3/stock/similar/$symbol?apikey=$fmpApiKey";
             $symbolsResponse = file_get_contents($symbolsUrl);
             $similarStocks = json_decode($symbolsResponse, true);
+            
+            // Get data from Alpha Vantage for BVPS calculation
+            $alphaVantageBalanceSheetUrl = "https://www.alphavantage.co/query?function=BALANCE_SHEET&symbol=$symbol&apikey=$alphaVantageApiKey";
+            $alphaVantageBalanceSheetResponse = file_get_contents($alphaVantageBalanceSheetUrl);
+            $alphaVantageBalanceSheetData = json_decode($alphaVantageBalanceSheetResponse, true);
+            
+            // Get balance sheet data for Debt-to-Equity from FMP
+            $balanceSheetUrl = "https://financialmodelingprep.com/api/v3/balance-sheet-statement/$symbol?limit=1&apikey=$fmpApiKey";
+            $balanceSheetResponse = file_get_contents($balanceSheetUrl);
+            $balanceSheetData = json_decode($balanceSheetResponse, true);
+            
+            // Get income statement data for ROIC from FMP
+            $incomeStatementUrl = "https://financialmodelingprep.com/api/v3/income-statement/$symbol?limit=1&apikey=$fmpApiKey";
+            $incomeStatementResponse = file_get_contents($incomeStatementUrl);
+            $incomeStatementData = json_decode($incomeStatementResponse, true);
+            
+            // Calculate financial metrics
+            $bvps = 0;
+            $debtToEquity = 0;
+            $roic = 0;
+            $bvpsSource = 'N/A'; // To track which API provided the BVPS data
+            
+            // Try to calculate BVPS from Alpha Vantage data first
+            if (!empty($alphaVantageBalanceSheetData) && isset($alphaVantageBalanceSheetData['annualReports']) && 
+                is_array($alphaVantageBalanceSheetData['annualReports']) && count($alphaVantageBalanceSheetData['annualReports']) > 0) {
+                
+                $latestReport = $alphaVantageBalanceSheetData['annualReports'][0];
+                
+                // Calculate BVPS using Alpha Vantage data
+                if (isset($latestReport['totalShareholderEquity']) && isset($latestReport['commonStockSharesOutstanding']) && 
+                    $latestReport['commonStockSharesOutstanding'] > 0) {
+                    $bvps = $latestReport['totalShareholderEquity'] / $latestReport['commonStockSharesOutstanding'];
+                    $bvpsSource = 'Alpha Vantage';
+                }
+            }
+            
+            // If Alpha Vantage doesn't have the data, try FMP as a fallback
+            if ($bvps == 0 && !empty($balanceSheetData) && is_array($balanceSheetData) && count($balanceSheetData) > 0) {
+                $balanceSheet = $balanceSheetData[0];
+                
+                // Calculate BVPS using FMP data
+                if (isset($balanceSheet['totalStockholdersEquity']) && isset($balanceSheet['commonStock']) && 
+                    isset($balanceSheet['commonStockSharesOutstanding']) && $balanceSheet['commonStockSharesOutstanding'] > 0) {
+                    $bvps = ($balanceSheet['totalStockholdersEquity'] - $balanceSheet['commonStock']) / $balanceSheet['commonStockSharesOutstanding'];
+                    $bvpsSource = 'Financial Modeling Prep';
+                }
+            }
+            
+            // Continue with other calculations using FMP data
+            if (!empty($balanceSheetData) && is_array($balanceSheetData) && count($balanceSheetData) > 0) {
+                $balanceSheet = $balanceSheetData[0];
+                
+                // Debt-to-Equity Ratio
+                if (isset($balanceSheet['totalLiabilities']) && isset($balanceSheet['totalStockholdersEquity']) && 
+                    $balanceSheet['totalStockholdersEquity'] > 0) {
+                    $debtToEquity = $balanceSheet['totalLiabilities'] / $balanceSheet['totalStockholdersEquity'];
+                }
+                
+                // Partial ROIC calculation - need income statement for the rest
+                if (!empty($incomeStatementData) && is_array($incomeStatementData) && count($incomeStatementData) > 0) {
+                    $incomeStatement = $incomeStatementData[0];
+                    
+                    // Calculate tax rate
+                    $taxRate = 0;
+                    if (isset($incomeStatement['incomeTaxExpense']) && isset($incomeStatement['incomeBeforeTax']) && 
+                        $incomeStatement['incomeBeforeTax'] > 0) {
+                        $taxRate = $incomeStatement['incomeTaxExpense'] / $incomeStatement['incomeBeforeTax'];
+                    }
+                    
+                    // Calculate NOPAT (Net Operating Profit After Tax)
+                    $nopat = 0;
+                    if (isset($incomeStatement['ebit'])) {
+                        $nopat = $incomeStatement['ebit'] * (1 - $taxRate);
+                    }
+                    
+                    // Calculate Invested Capital
+                    $investedCapital = 0;
+                    if (isset($balanceSheet['totalDebt']) && isset($balanceSheet['totalStockholdersEquity']) && 
+                        isset($balanceSheet['cashAndCashEquivalents'])) {
+                        $investedCapital = $balanceSheet['totalDebt'] + $balanceSheet['totalStockholdersEquity'] - $balanceSheet['cashAndCashEquivalents'];
+                    }
+                    
+                    // Calculate ROIC
+                    if ($investedCapital > 0) {
+                        $roic = $nopat / $investedCapital;
+                    }
+                }
+            }
             
             if (!empty($profileData)) {
                 $stock = $profileData[0];
@@ -199,7 +288,55 @@
                         <?php } ?>
                     </div>
                 </div>
-        <?php
+                
+                <!-- New Financial Ratios Section -->
+                <div class="card mt-4">
+                    <div class="card-header bg-success text-white">
+                        <h4 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Financial Ratios</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-12">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Metric</th>
+                                            <th>Value</th>
+                                            <th>Description</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <th>Book Value per Share (BVPS)</th>
+                                            <td>
+                                                <?php 
+                                                if ($bvps > 0) {
+                                                    echo '$' . number_format($bvps, 2);
+                                                    echo ' <small class="text-muted">(' . $bvpsSource . ')</small>';
+                                                } else {
+                                                    echo 'N/A';
+                                                }
+                                                ?>
+                                            </td>
+                                            <td><small class="text-muted">Net asset value per share of common stock</small></td>
+                                        </tr>
+                                        <tr>
+                                            <th>Debt-to-Equity Ratio</th>
+                                            <td><?php echo $debtToEquity > 0 ? number_format($debtToEquity, 2) : 'N/A'; ?></td>
+                                            <td><small class="text-muted">Measures financial leverage and company risk</small></td>
+                                        </tr>
+                                        <tr>
+                                            <th>Return on Invested Capital (ROIC)</th>
+                                            <td><?php echo $roic > 0 ? number_format($roic * 100, 2) . '%' : 'N/A'; ?></td>
+                                            <td><small class="text-muted">Profitability relative to capital invested</small></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            <?php
             } else {
                 echo '<div class="alert alert-danger"><i class="fas fa-exclamation-circle me-2"></i>No data found for symbol: ' . htmlspecialchars($symbol) . '</div>';
             }
