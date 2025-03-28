@@ -202,6 +202,22 @@
             margin-top: 5px;
             font-size: 1rem;
         }
+        
+        .ratio-card {
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            transition: all 0.3s;
+            background-color: var(--darker-bg);
+        }
+        
+        .ratio-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .ratio-value {
+            margin: 15px 0;
+        }
     </style>
 </head>
 <body>
@@ -414,19 +430,98 @@
                     $stock = $profileData[0];
             ?>
                     <div class="row">
-                        <div class="col-md-8">
+                        <div class="col-12">
+                            <!-- Company header with logo on the left -->
+                            <div class="company-header d-flex align-items-center">
+                                <?php if (isset($stock['image']) && !empty($stock['image'])) { ?>
+                                    <img src="<?php echo htmlspecialchars($stock['image']); ?>" alt="<?php echo htmlspecialchars($stock['companyName']); ?> logo" class="stock-logo">
+                                <?php } else { ?>
+                                    <div class="stock-logo d-flex align-items-center justify-content-center bg-primary rounded">
+                                        <span class="display-6 text-white"><?php echo substr($stock['symbol'], 0, 2); ?></span>
+                                    </div>
+                                <?php } ?>
+                                <div class="ms-3">
+                                    <h2 class="mb-0"><?php echo htmlspecialchars($stock['companyName']); ?> (<?php echo htmlspecialchars($stock['symbol']); ?>)</h2>
+                                    <h3 class="text-<?php echo $stock['changes'] >= 0 ? 'success' : 'danger'; ?>">
+                                        $<?php echo number_format($stock['price'], 2); ?>
+                                        <small class="ms-2 <?php echo $stock['changes'] >= 0 ? 'text-success' : 'text-danger'; ?>">
+                                            <?php echo $stock['changes'] >= 0 ? '+' : ''; ?><?php echo number_format($stock['changes'], 2); ?> 
+                                            (<?php echo number_format($stock['changesPercentage'], 2); ?>%)
+                                        </small>
+                                    </h3>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Financial Ratios Section - Now at the top -->
+                    <div class="row mb-4">
+                        <div class="col-md-12">
                             <div class="card">
-                                <div class="company-header">
-                                    <div class="d-flex align-items-center">
-                                        <?php if (isset($stock['image']) && !empty($stock['image'])) { ?>
-                                        <img src="<?php echo htmlspecialchars($stock['image']); ?>" alt="<?php echo htmlspecialchars($stock['companyName']); ?> logo" 
-                                            class="stock-logo">
-                                        <?php } ?>
-                                        <div class="ms-3">
-                                            <h2 class="mb-0"><?php echo htmlspecialchars($stock['companyName']); ?> (<?php echo htmlspecialchars($stock['symbol']); ?>)</h2>
-                                            <h3 class="mb-0">$<?php echo number_format($stock['price'], 2); ?></h3>
+                                <div class="card-header bg-success text-white">
+                                    <h4 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Financial Ratios</h4>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="ratio-card p-3 text-center">
+                                                <h5>Book Value per Share (BVPS)</h5>
+                                                <div class="ratio-value">
+                                                    <?php 
+                                                    if ($bvps > 0) {
+                                                        echo '<span class="h3">$' . number_format($bvps, 2) . '</span>';
+                                                        echo '<div class="text-muted small">(' . $bvpsSource . ')</div>';
+                                                    } else {
+                                                        echo '<span class="h3">N/A</span>';
+                                                    }
+                                                    ?>
+                                                </div>
+                                                <div class="text-muted small mt-2">Net asset value per share of common stock</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="ratio-card p-3 text-center">
+                                                <h5>Debt-to-Equity Ratio</h5>
+                                                <div class="ratio-value">
+                                                    <?php 
+                                                    if ($debtToEquity > 0) {
+                                                        echo '<span class="h3">' . number_format($debtToEquity, 2) . '</span>';
+                                                        echo '<div class="text-muted small">(' . $debtToEquitySource . ')</div>';
+                                                    } else {
+                                                        echo '<span class="h3">N/A</span>';
+                                                    }
+                                                    ?>
+                                                </div>
+                                                <div class="text-muted small mt-2">Measures financial leverage and company risk</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="ratio-card p-3 text-center">
+                                                <h5>Return on Invested Capital</h5>
+                                                <div class="ratio-value">
+                                                    <?php 
+                                                    if ($roic > 0) {
+                                                        echo '<span class="h3">' . number_format($roic * 100, 2) . '%</span>';
+                                                        echo '<div class="text-muted small">(' . $roicSource . ')</div>';
+                                                    } else {
+                                                        echo '<span class="h3">N/A</span>';
+                                                    }
+                                                    ?>
+                                                </div>
+                                                <div class="text-muted small mt-2">Profitability relative to capital invested</div>
+                                            </div>
                                         </div>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h4 class="mb-0"><i class="fas fa-info-circle me-2"></i>Company Information</h4>
                                 </div>
                                 <div class="card-body">
                                     <div class="row">
@@ -481,94 +576,52 @@
                         <div class="col-md-4">
                             <div class="card">
                                 <div class="card-header bg-primary text-white">
-                                    <h4 class="mb-0"><i class="fas fa-exchange-alt me-2"></i>Similar Stocks</h4>
+                                    <h4 class="mb-0"><i class="fas fa-exchange-alt me-2"></i>Top 10 Similar Stocks</h4>
                                 </div>
                                 <div class="card-body">
                                     <?php
+                                    // Try to get similar stocks from FMP first
+                                    $topSimilarStocks = [];
                                     if (!empty($similarStocks) && isset($similarStocks['similar'])) {
-                                        $aliases = $similarStocks['similar'];
-                                        if (count($aliases) > 0) {
-                                            echo '<ul class="list-group">';
-                                            foreach ($aliases as $alias) {
-                                                echo '<li class="list-group-item alias-item">';
-                                                echo '<a href="?symbol=' . htmlspecialchars($alias) . '" class="d-block p-2 text-decoration-none">';
-                                                echo '<i class="fas fa-external-link-alt me-2"></i>' . htmlspecialchars($alias);
-                                                echo '</a></li>';
+                                        $topSimilarStocks = array_slice($similarStocks['similar'], 0, 10);
+                                    }
+                                    
+                                    // If we don't have enough stocks from FMP, try Alpha Vantage
+                                    if (count($topSimilarStocks) < 10) {
+                                        // Get top stocks from sector if available
+                                        if (isset($stock['sector']) && !empty($stock['sector'])) {
+                                            $sectorStocksUrl = "https://financialmodelingprep.com/api/v3/stock-screener?sector=" . urlencode($stock['sector']) . "&limit=10&apikey=" . $fmpApiKey;
+                                            $sectorStocksResponse = @file_get_contents($sectorStocksUrl);
+                                            if ($sectorStocksResponse !== false) {
+                                                $sectorStocks = json_decode($sectorStocksResponse, true);
+                                                if (!empty($sectorStocks) && is_array($sectorStocks)) {
+                                                    foreach ($sectorStocks as $sectorStock) {
+                                                        if (isset($sectorStock['symbol']) && $sectorStock['symbol'] != $symbol && !in_array($sectorStock['symbol'], $topSimilarStocks)) {
+                                                            $topSimilarStocks[] = $sectorStock['symbol'];
+                                                            if (count($topSimilarStocks) >= 10) {
+                                                                break;
+                                                            }
+                                                        }
+                                                    }
+                                                }
                                             }
-                                            echo '</ul>';
-                                        } else {
-                                            echo '<div class="alert alert-info">No similar stocks found.</div>';
                                         }
+                                    }
+                                    
+                                    // Display the top similar stocks
+                                    if (count($topSimilarStocks) > 0) {
+                                        echo '<ul class="list-group">';
+                                        foreach ($topSimilarStocks as $alias) {
+                                            echo '<li class="list-group-item alias-item">';
+                                            echo '<a href="?symbol=' . htmlspecialchars($alias) . '" class="d-block p-2 text-decoration-none">';
+                                            echo '<i class="fas fa-external-link-alt me-2"></i>' . htmlspecialchars($alias);
+                                            echo '</a></li>';
+                                        }
+                                        echo '</ul>';
                                     } else {
-                                        echo '<div class="alert alert-info">No similar stocks information available.</div>';
+                                        echo '<div class="alert alert-info">No similar stocks found.</div>';
                                     }
                                     ?>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- New Financial Ratios Section -->
-                    <div class="card mt-4">
-                        <div class="card-header bg-success text-white">
-                            <h4 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Financial Ratios</h4>
-                        </div>
-                        <div class="card-body">
-                            <div class="row">
-                                <div class="col-md-12">
-                                    <table class="table">
-                                        <thead>
-                                            <tr>
-                                                <th>Metric</th>
-                                                <th>Value</th>
-                                                <th>Description</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <tr>
-                                                <th>Book Value per Share (BVPS)</th>
-                                                <td>
-                                                    <?php 
-                                                    if ($bvps > 0) {
-                                                        echo '$' . number_format($bvps, 2);
-                                                        echo ' <small class="text-muted">(' . $bvpsSource . ')</small>';
-                                                    } else {
-                                                        echo 'N/A';
-                                                    }
-                                                    ?>
-                                                </td>
-                                                <td><small class="text-muted">Net asset value per share of common stock</small></td>
-                                            </tr>
-                                            <tr>
-                                                <th>Debt-to-Equity Ratio</th>
-                                                <td>
-                                                    <?php 
-                                                    if ($debtToEquity > 0) {
-                                                        echo number_format($debtToEquity, 2);
-                                                        echo ' <small class="text-muted">(' . $debtToEquitySource . ')</small>';
-                                                    } else {
-                                                        echo 'N/A';
-                                                    }
-                                                    ?>
-                                                </td>
-                                                <td><small class="text-muted">Measures financial leverage and company risk</small></td>
-                                            </tr>
-                                            <tr>
-                                                <th>Return on Invested Capital (ROIC)</th>
-                                                <td>
-                                                    <?php 
-                                                    if ($roic > 0) {
-                                                        echo number_format($roic * 100, 2) . '%';
-                                                        echo ' <small class="text-muted">(' . $roicSource . ')</small>';
-                                                    } else {
-                                                        echo 'N/A';
-                                                    }
-                                                    ?>
-                                                </td>
-                                                <td><small class="text-muted">Profitability relative to capital invested</small></td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
                                 </div>
                             </div>
                         </div>
