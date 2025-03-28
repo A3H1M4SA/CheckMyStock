@@ -218,6 +218,31 @@
         .ratio-value {
             margin: 15px 0;
         }
+        
+        .share-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background-color: #25D366;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            border: none;
+            cursor: pointer;
+            z-index: 1000;
+            transition: all 0.3s;
+        }
+        
+        .share-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
+        }
     </style>
 </head>
 <body>
@@ -308,10 +333,6 @@
                 $roicSource = 'N/A'; // To track which API provided the ROIC data
                 $debtToEquitySource = 'N/A'; // To track which API provided the Debt-to-Equity data
                 
-                // Let's create variables to store debug info
-                $debug_bvps = [];
-                $debug_roic = [];
-                
                 // Try to calculate BVPS from Alpha Vantage data first
                 if (!empty($alphaVantageBalanceSheetData) && isset($alphaVantageBalanceSheetData['annualReports']) && 
                     is_array($alphaVantageBalanceSheetData['annualReports']) && count($alphaVantageBalanceSheetData['annualReports']) > 0) {
@@ -323,13 +344,6 @@
                         $latestReport['commonStockSharesOutstanding'] > 0) {
                         $bvps = $latestReport['totalShareholderEquity'] / $latestReport['commonStockSharesOutstanding'];
                         $bvpsSource = 'Alpha Vantage';
-                        
-                        $debug_bvps[] = [
-                            'source' => 'Alpha Vantage',
-                            'equity' => $latestReport['totalShareholderEquity'],
-                            'shares' => $latestReport['commonStockSharesOutstanding'],
-                            'result' => $bvps
-                        ];
                     }
                 }
                 
@@ -357,27 +371,12 @@
                             $bvps = $balanceSheet['totalStockholdersEquity'] / $sharesOutstanding;
                         }
                         $bvpsSource = 'Financial Modeling Prep';
-                        
-                        $debug_bvps[] = [
-                            'source' => 'FMP',
-                            'totalStockholdersEquity' => $balanceSheet['totalStockholdersEquity'],
-                            'commonStock' => isset($balanceSheet['commonStock']) ? $balanceSheet['commonStock'] : 'Not set',
-                            'shares' => $sharesOutstanding,
-                            'result' => $bvps
-                        ];
                     } else if (isset($balanceSheet['totalStockholdersEquity']) && 
                               isset($balanceSheet['commonStockSharesOutstanding']) && 
                               $balanceSheet['commonStockSharesOutstanding'] > 0) {
                         // Try original method as fallback
                         $bvps = $balanceSheet['totalStockholdersEquity'] / $balanceSheet['commonStockSharesOutstanding'];
                         $bvpsSource = 'Financial Modeling Prep';
-                        
-                        $debug_bvps[] = [
-                            'source' => 'FMP (original)',
-                            'totalStockholdersEquity' => $balanceSheet['totalStockholdersEquity'],
-                            'shares' => $balanceSheet['commonStockSharesOutstanding'],
-                            'result' => $bvps
-                        ];
                     }
                 }
                 
@@ -423,13 +422,6 @@
                         if ($investedCapital > 0) {
                             $roic = $nopat / $investedCapital;
                             $roicSource = 'Alpha Vantage';
-                            
-                            $debug_roic[] = [
-                                'source' => 'Alpha Vantage',
-                                'nopat' => $nopat,
-                                'investedCapital' => $investedCapital,
-                                'result' => $roic
-                            ];
                         }
                     }
                 }
@@ -478,13 +470,6 @@
                             if ($investedCapital > 0 && $nopat != 0) {
                                 $roic = $nopat / $investedCapital;
                                 $roicSource = 'Financial Modeling Prep';
-                                
-                                $debug_roic[] = [
-                                    'source' => 'FMP',
-                                    'nopat' => $nopat,
-                                    'investedCapital' => $investedCapital,
-                                    'result' => $roic
-                                ];
                             }
                         }
                     }
@@ -532,27 +517,6 @@
                                                 <h5>Book Value per Share (BVPS)</h5>
                                                 <div class="ratio-value">
                                                     <?php 
-                                                    // Debug output
-                                                    echo '<div style="text-align:left;font-size:12px;margin-bottom:10px;background:#333;padding:5px;border-radius:5px;">';
-                                                    echo '<strong>Debug BVPS:</strong><br>';
-                                                    echo 'Value: ' . $bvps . '<br>';
-                                                    echo 'Source: ' . $bvpsSource . '<br>';
-                                                    
-                                                    if (!empty($alphaVantageBalanceSheetData) && isset($alphaVantageBalanceSheetData['annualReports']) && 
-                                                        is_array($alphaVantageBalanceSheetData['annualReports']) && count($alphaVantageBalanceSheetData['annualReports']) > 0) {
-                                                        $latestReport = $alphaVantageBalanceSheetData['annualReports'][0];
-                                                        echo 'AV Total Equity: ' . (isset($latestReport['totalShareholderEquity']) ? $latestReport['totalShareholderEquity'] : 'Not set') . '<br>';
-                                                        echo 'AV Shares Out: ' . (isset($latestReport['commonStockSharesOutstanding']) ? $latestReport['commonStockSharesOutstanding'] : 'Not set') . '<br>';
-                                                    }
-                                                    
-                                                    if (!empty($balanceSheetData) && is_array($balanceSheetData) && count($balanceSheetData) > 0) {
-                                                        $balanceSheet = $balanceSheetData[0];
-                                                        echo 'FMP Total Equity: ' . (isset($balanceSheet['totalStockholdersEquity']) ? $balanceSheet['totalStockholdersEquity'] : 'Not set') . '<br>';
-                                                        echo 'FMP Common Stock: ' . (isset($balanceSheet['commonStock']) ? $balanceSheet['commonStock'] : 'Not set') . '<br>';
-                                                        echo 'FMP Shares Out: ' . (isset($balanceSheet['commonStockSharesOutstanding']) ? $balanceSheet['commonStockSharesOutstanding'] : 'Not set') . '<br>';
-                                                    }
-                                                    echo '</div>';
-                                                    
                                                     // Simply display the value, regardless of whether it's zero
                                                     if ($bvpsSource !== 'N/A') {
                                                         echo '<span class="h3">$' . number_format($bvps, 2) . '</span>';
@@ -587,44 +551,6 @@
                                                 <h5>Return on Invested Capital</h5>
                                                 <div class="ratio-value">
                                                     <?php 
-                                                    // Debug output
-                                                    echo '<div style="text-align:left;font-size:12px;margin-bottom:10px;background:#333;padding:5px;border-radius:5px;">';
-                                                    echo '<strong>Debug ROIC:</strong><br>';
-                                                    echo 'Value: ' . $roic . '<br>';
-                                                    echo 'Source: ' . $roicSource . '<br>';
-                                                    
-                                                    if (!empty($alphaVantageIncomeStatementData) && isset($alphaVantageIncomeStatementData['annualReports']) && 
-                                                        is_array($alphaVantageIncomeStatementData['annualReports']) && count($alphaVantageIncomeStatementData['annualReports']) > 0) {
-                                                        $incomeStatementReport = $alphaVantageIncomeStatementData['annualReports'][0];
-                                                        echo 'AV EBIT: ' . (isset($incomeStatementReport['ebit']) ? $incomeStatementReport['ebit'] : 'Not set') . '<br>';
-                                                        echo 'AV Income Tax: ' . (isset($incomeStatementReport['incomeTaxExpense']) ? $incomeStatementReport['incomeTaxExpense'] : 'Not set') . '<br>';
-                                                        echo 'AV Income Before Tax: ' . (isset($incomeStatementReport['incomeBeforeTax']) ? $incomeStatementReport['incomeBeforeTax'] : 'Not set') . '<br>';
-                                                    }
-                                                    
-                                                    if (!empty($alphaVantageBalanceSheetData) && isset($alphaVantageBalanceSheetData['annualReports']) && 
-                                                        is_array($alphaVantageBalanceSheetData['annualReports']) && count($alphaVantageBalanceSheetData['annualReports']) > 0) {
-                                                        $balanceSheetReport = $alphaVantageBalanceSheetData['annualReports'][0];
-                                                        echo 'AV Total Equity: ' . (isset($balanceSheetReport['totalShareholderEquity']) ? $balanceSheetReport['totalShareholderEquity'] : 'Not set') . '<br>';
-                                                        echo 'AV Short Term Debt: ' . (isset($balanceSheetReport['shortTermDebt']) ? $balanceSheetReport['shortTermDebt'] : 'Not set') . '<br>';
-                                                        echo 'AV Long Term Debt: ' . (isset($balanceSheetReport['longTermDebt']) ? $balanceSheetReport['longTermDebt'] : 'Not set') . '<br>';
-                                                        echo 'AV Cash: ' . (isset($balanceSheetReport['cashAndCashEquivalentsAtCarryingValue']) ? $balanceSheetReport['cashAndCashEquivalentsAtCarryingValue'] : 'Not set') . '<br>';
-                                                    }
-                                                    
-                                                    if (!empty($incomeStatementData) && is_array($incomeStatementData) && count($incomeStatementData) > 0) {
-                                                        $incomeStatement = $incomeStatementData[0];
-                                                        echo 'FMP EBIT: ' . (isset($incomeStatement['ebit']) ? $incomeStatement['ebit'] : 'Not set') . '<br>';
-                                                        echo 'FMP Income Tax: ' . (isset($incomeStatement['incomeTaxExpense']) ? $incomeStatement['incomeTaxExpense'] : 'Not set') . '<br>';
-                                                        echo 'FMP Income Before Tax: ' . (isset($incomeStatement['incomeBeforeTax']) ? $incomeStatement['incomeBeforeTax'] : 'Not set') . '<br>';
-                                                    }
-                                                    
-                                                    if (!empty($balanceSheetData) && is_array($balanceSheetData) && count($balanceSheetData) > 0) {
-                                                        $balanceSheet = $balanceSheetData[0];
-                                                        echo 'FMP Total Equity: ' . (isset($balanceSheet['totalStockholdersEquity']) ? $balanceSheet['totalStockholdersEquity'] : 'Not set') . '<br>';
-                                                        echo 'FMP Total Debt: ' . (isset($balanceSheet['totalDebt']) ? $balanceSheet['totalDebt'] : 'Not set') . '<br>';
-                                                        echo 'FMP Cash: ' . (isset($balanceSheet['cashAndCashEquivalents']) ? $balanceSheet['cashAndCashEquivalents'] : 'Not set') . '<br>';
-                                                    }
-                                                    echo '</div>';
-                                                    
                                                     // Simply display the value, regardless of whether it's zero
                                                     if ($roicSource !== 'N/A') {
                                                         // Use different text color for negative ROIC
@@ -817,6 +743,44 @@
             ?>
         </div>
     </div>
+    
+    <!-- WhatsApp Share Button -->
+    <?php if (isset($symbol) && !empty($profileData)) { 
+        $stock = $profileData[0];
+        $shareTitle = $stock['companyName'] . ' (' . $stock['symbol'] . ')';
+        $sharePrice = '$' . number_format($stock['price'], 2);
+        $shareChange = ($stock['changes'] >= 0 ? '+' : '') . number_format($stock['changes'], 2) . ' (' . number_format(isset($stock['changesPercentage']) ? $stock['changesPercentage'] : 0, 2) . '%)';
+        
+        // Build financial ratios part if available
+        $shareRatios = "";
+        if ($bvpsSource !== 'N/A') {
+            $shareRatios .= "BVPS: $" . number_format($bvps, 2) . " | ";
+        }
+        if ($debtToEquitySource !== 'N/A') {
+            $shareRatios .= "D/E: " . number_format($debtToEquity, 2) . " | ";
+        }
+        if ($roicSource !== 'N/A') {
+            $shareRatios .= "ROIC: " . number_format($roic * 100, 2) . "% | ";
+        }
+        $shareRatios = rtrim($shareRatios, " | ");
+        
+        // Build the share text
+        $shareText = "Check out " . $shareTitle . " trading at " . $sharePrice . " " . $shareChange;
+        if (!empty($shareRatios)) {
+            $shareText .= "\n" . $shareRatios;
+        }
+        $shareText .= "\n\nAnalyzed with CheckMyStock - The simple stock analyzer!";
+        
+        // Current URL with symbol
+        $currentUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
+        
+        // Final share URL for WhatsApp
+        $shareUrl = "https://wa.me/?text=" . urlencode($shareText . "\n\n" . $currentUrl);
+    ?>
+    <a href="<?php echo $shareUrl; ?>" target="_blank" class="share-btn" title="Share via WhatsApp">
+        <i class="fab fa-whatsapp"></i>
+    </a>
+    <?php } ?>
     
     <footer class="bg-light mt-5 py-3 text-center">
         <div class="container">
