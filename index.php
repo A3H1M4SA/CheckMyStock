@@ -100,6 +100,21 @@
             border-color: var(--border-color);
         }
         
+        /* Custom hover effect for tables in dark theme */
+        .table-hover tbody tr:hover {
+            background-color: rgba(52, 152, 219, 0.15) !important; /* Primary color with opacity */
+            color: white !important;
+        }
+        
+        /* Ensure all text within hovered rows turns white */
+        .table-hover tbody tr:hover td,
+        .table-hover tbody tr:hover th,
+        .table-hover tbody tr:hover a,
+        .table-hover tbody tr:hover .text-success,
+        .table-hover tbody tr:hover .text-danger {
+            color: white !important;
+        }
+        
         .text-muted {
             color: var(--text-muted) !important;
         }
@@ -200,7 +215,19 @@
         
         .loader-text {
             text-align: center;
-            max-width: 300px;
+            max-width: 400px;
+            margin: 0 auto;
+        }
+        
+        #loadingTips {
+            text-align: center;
+            margin: 0 auto;
+        }
+        
+        #loadingTips .alert {
+            display: inline-block;
+            margin: 0 auto;
+            text-align: center;
         }
         
         @keyframes spin {
@@ -384,7 +411,7 @@
             <?php } ?>
         </div>
 
-        <div id="loadingSection" style="display: <?php echo isset($_GET['symbol']) ? 'none' : 'none'; ?>">
+        <div id="loadingSection" style="display: none;">
             <div class="loader-container">
                 <div class="loader"></div>
                 <div class="loader-text">
