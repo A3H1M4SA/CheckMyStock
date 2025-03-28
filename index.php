@@ -324,6 +324,32 @@
         .share-instagram {
             background: linear-gradient(45deg, #405DE6, #5851DB, #833AB4, #C13584, #E1306C, #FD1D1D, #F56040, #F77737, #FCAF45, #FFDC80);
         }
+        
+        /* News card styling */
+        .news-card {
+            transition: all 0.3s ease;
+            border-left: 4px solid var(--success-color);
+        }
+        
+        .news-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+        
+        .news-link {
+            color: var(--text-color);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        
+        .news-link:hover {
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+        
+        .card-footer {
+            border-top: 1px solid var(--border-color);
+        }
     </style>
 </head>
 <body>
@@ -873,6 +899,205 @@
             }
             ?>
         </div>
+        
+        <?php if (!isset($_GET['symbol'])) { ?>
+            <!-- Homepage content - show when no specific stock is requested -->
+            <!-- 1. Fetch top 10 most active stocks -->
+            <?php
+            // Define the API key if not already defined
+            if (!isset($fmpApiKey)) {
+                $fmpApiKey = "TS7dAXGizXA4HhENFsDpWK3jpvZWuNM1";
+            }
+            
+            $mostActiveUrl = "https://financialmodelingprep.com/api/v3/stock_market/actives?apikey=" . $fmpApiKey;
+            $mostActiveResponse = @file_get_contents($mostActiveUrl);
+            $mostActiveStocks = [];
+            
+            if ($mostActiveResponse !== false) {
+                $mostActiveStocks = json_decode($mostActiveResponse, true);
+            }
+            
+            // If the main API call fails, try the gainers endpoint as fallback
+            if (empty($mostActiveStocks)) {
+                $gainersUrl = "https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey=" . $fmpApiKey;
+                $gainersResponse = @file_get_contents($gainersUrl);
+                
+                if ($gainersResponse !== false) {
+                    $mostActiveStocks = json_decode($gainersResponse, true);
+                }
+            }
+            
+            // If that still fails, try a different endpoint as a final fallback
+            if (empty($mostActiveStocks)) {
+                $stockListUrl = "https://financialmodelingprep.com/api/v3/stock/list?apikey=" . $fmpApiKey;
+                $stockListResponse = @file_get_contents($stockListUrl);
+                
+                if ($stockListResponse !== false) {
+                    $stockList = json_decode($stockListResponse, true);
+                    
+                    // Take the first 10 stocks from the list
+                    $mostActiveStocks = array_slice($stockList, 0, 10);
+                    
+                    // Add missing fields if necessary
+                    foreach ($mostActiveStocks as &$stock) {
+                        if (!isset($stock['change'])) $stock['change'] = 0;
+                        if (!isset($stock['changesPercentage'])) $stock['changesPercentage'] = 0;
+                        if (!isset($stock['name'])) $stock['name'] = $stock['symbol'];
+                    }
+                }
+            }
+            
+            // 2. Fetch market news from RSS feed
+            $marketNewsItems = [];
+            $rssFeeds = [
+                'Yahoo Finance' => 'https://finance.yahoo.com/news/rssindex',
+                'Investing.com' => 'https://www.investing.com/rss/news.rss',
+                'CNBC' => 'https://www.cnbc.com/id/10001147/device/rss/rss.html'
+            ];
+            
+            // Try each feed until we get some news
+            foreach ($rssFeeds as $source => $feedUrl) {
+                $rss = @simplexml_load_file($feedUrl);
+                if ($rss) {
+                    $count = 0;
+                    foreach ($rss->channel->item as $item) {
+                        if ($count >= 5) break; // Get 5 news items
+                        
+                        $pubDate = isset($item->pubDate) ? date('M d, Y', strtotime($item->pubDate)) : '';
+                        $description = (string)$item->description;
+                        
+                        // Clean up the description text
+                        $description = strip_tags($description);
+                        // Remove any ellipsis that might be in the original text
+                        $description = str_replace('...', '', $description);
+                        // Truncate and add our own ellipsis
+                        if (strlen($description) > 150) {
+                            $description = substr($description, 0, 150) . '…';
+                        }
+                        
+                        $marketNewsItems[] = [
+                            'title' => (string)$item->title,
+                            'link' => (string)$item->link,
+                            'description' => $description,
+                            'pubDate' => $pubDate,
+                            'source' => $source
+                        ];
+                        $count++;
+                    }
+                    
+                    if (count($marketNewsItems) > 0) {
+                        break; // If we got news, we can stop trying feeds
+                    }
+                }
+            }
+            
+            // If no RSS feeds worked, use a fallback message
+            if (empty($marketNewsItems)) {
+                $marketNewsItems[] = [
+                    'title' => 'Market data currently unavailable',
+                    'description' => 'Please check back later for the latest market news and updates.',
+                    'pubDate' => date('M d, Y'),
+                    'source' => 'System'
+                ];
+            }
+            
+            // Display homepage with top stocks and news
+            ?>
+            <div class="row mb-4">
+                <div class="col-md-12">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h4 class="mb-0"><i class="fas fa-fire me-2"></i>Today's Most Active Stocks</h4>
+                        </div>
+                        <div class="card-body p-0">
+                            <?php if (!empty($mostActiveStocks)) { ?>
+                                <div class="table-responsive">
+                                    <table class="table table-hover mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>Symbol</th>
+                                                <th>Company</th>
+                                                <th>Price</th>
+                                                <th>Change</th>
+                                                <th>% Change</th>
+                                                <th>Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php 
+                                            $count = 0;
+                                            foreach ($mostActiveStocks as $stock) {
+                                                if ($count >= 10) break; // Only show top 10
+                                                
+                                                $changeClass = isset($stock['change']) && $stock['change'] >= 0 ? 'text-success' : 'text-danger';
+                                                $changeSign = isset($stock['change']) && $stock['change'] >= 0 ? '+' : '';
+                                                $changePercentage = isset($stock['changesPercentage']) ? $stock['changesPercentage'] : 0;
+                                            ?>
+                                                <tr>
+                                                    <td><strong><?php echo htmlspecialchars($stock['symbol']); ?></strong></td>
+                                                    <td><?php echo htmlspecialchars($stock['name']); ?></td>
+                                                    <td>$<?php echo number_format($stock['price'], 2); ?></td>
+                                                    <td class="<?php echo $changeClass; ?>"><?php echo $changeSign . number_format($stock['change'], 2); ?></td>
+                                                    <td class="<?php echo $changeClass; ?>"><?php echo $changeSign . number_format($changePercentage, 2); ?>%</td>
+                                                    <td>
+                                                        <a href="?symbol=<?php echo $stock['symbol']; ?>" class="btn btn-sm btn-primary">
+                                                            <i class="fas fa-chart-line me-1"></i>Analyze
+                                                        </a>
+                                                    </td>
+                                                </tr>
+                                            <?php 
+                                                $count++;
+                                            } 
+                                            ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            <?php } else { ?>
+                                <div class="alert alert-info m-3">
+                                    <i class="fas fa-info-circle me-2"></i>Unable to load most active stocks. Please try again later.
+                                </div>
+                            <?php } ?>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-12">
+                    <div class="card">
+                        <div class="card-header bg-success text-white">
+                            <h4 class="mb-0"><i class="fas fa-newspaper me-2"></i>Latest Market News</h4>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <?php foreach ($marketNewsItems as $item) { ?>
+                                <div class="col-md-6 mb-4">
+                                    <div class="card h-100 news-card">
+                                        <div class="card-body">
+                                            <h5 class="card-title">
+                                                <?php if (isset($item['link'])) { ?>
+                                                    <a href="<?php echo htmlspecialchars($item['link']); ?>" target="_blank" class="news-link">
+                                                        <?php echo htmlspecialchars($item['title']); ?>
+                                                    </a>
+                                                <?php } else { ?>
+                                                    <?php echo htmlspecialchars($item['title']); ?>
+                                                <?php } ?>
+                                            </h5>
+                                            <p class="card-text text-muted"><?php echo $item['description']; ?></p>
+                                        </div>
+                                        <div class="card-footer d-flex justify-content-between bg-transparent">
+                                            <small class="text-muted"><i class="fas fa-newspaper me-1"></i><?php echo $item['source']; ?></small>
+                                            <small class="text-muted"><i class="far fa-calendar-alt me-1"></i><?php echo $item['pubDate']; ?></small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <?php } ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        <?php } ?>
     </div>
     
     <footer>
