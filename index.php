@@ -223,7 +223,7 @@
 <body>
     <div class="container">
         <h1 class="text-center mb-4">
-            <i class="fas fa-chart-line me-2"></i>CheckMyStock - ALPHA v1.0.0
+            <i class="fas fa-chart-line me-2"></i>CheckMyStock - ALPHA v1.0.9
         </h1>
         
         <div class="search-container">
@@ -308,6 +308,10 @@
                 $roicSource = 'N/A'; // To track which API provided the ROIC data
                 $debtToEquitySource = 'N/A'; // To track which API provided the Debt-to-Equity data
                 
+                // Let's create variables to store debug info
+                $debug_bvps = [];
+                $debug_roic = [];
+                
                 // Try to calculate BVPS from Alpha Vantage data first
                 if (!empty($alphaVantageBalanceSheetData) && isset($alphaVantageBalanceSheetData['annualReports']) && 
                     is_array($alphaVantageBalanceSheetData['annualReports']) && count($alphaVantageBalanceSheetData['annualReports']) > 0) {
@@ -319,6 +323,13 @@
                         $latestReport['commonStockSharesOutstanding'] > 0) {
                         $bvps = $latestReport['totalShareholderEquity'] / $latestReport['commonStockSharesOutstanding'];
                         $bvpsSource = 'Alpha Vantage';
+                        
+                        $debug_bvps[] = [
+                            'source' => 'Alpha Vantage',
+                            'equity' => $latestReport['totalShareholderEquity'],
+                            'shares' => $latestReport['commonStockSharesOutstanding'],
+                            'result' => $bvps
+                        ];
                     }
                 }
                 
@@ -326,11 +337,47 @@
                 if ($bvps == 0 && !empty($balanceSheetData) && is_array($balanceSheetData) && count($balanceSheetData) > 0) {
                     $balanceSheet = $balanceSheetData[0];
                     
-                    // Calculate BVPS using FMP data
-                    if (isset($balanceSheet['totalStockholdersEquity']) && isset($balanceSheet['commonStock']) && 
-                        isset($balanceSheet['commonStockSharesOutstanding']) && $balanceSheet['commonStockSharesOutstanding'] > 0) {
-                        $bvps = ($balanceSheet['totalStockholdersEquity'] - $balanceSheet['commonStock']) / $balanceSheet['commonStockSharesOutstanding'];
+                    // Check if we have shares outstanding in the stock profile
+                    $sharesOutstanding = 0;
+                    if (!empty($profileData) && is_array($profileData) && count($profileData) > 0) {
+                        if (isset($profileData[0]['mktCap']) && isset($profileData[0]['price']) && $profileData[0]['price'] > 0) {
+                            // Calculate shares outstanding from market cap and price
+                            $sharesOutstanding = $profileData[0]['mktCap'] / $profileData[0]['price'];
+                        } else if (isset($profileData[0]['outstandingShares'])) {
+                            $sharesOutstanding = $profileData[0]['outstandingShares'];
+                        }
+                    }
+                    
+                    // Calculate BVPS using FMP data and profile data for shares
+                    if (isset($balanceSheet['totalStockholdersEquity']) && $sharesOutstanding > 0) {
+                        // Calculate with or without common stock depending on availability
+                        if (isset($balanceSheet['commonStock'])) {
+                            $bvps = ($balanceSheet['totalStockholdersEquity'] - $balanceSheet['commonStock']) / $sharesOutstanding;
+                        } else {
+                            $bvps = $balanceSheet['totalStockholdersEquity'] / $sharesOutstanding;
+                        }
                         $bvpsSource = 'Financial Modeling Prep';
+                        
+                        $debug_bvps[] = [
+                            'source' => 'FMP',
+                            'totalStockholdersEquity' => $balanceSheet['totalStockholdersEquity'],
+                            'commonStock' => isset($balanceSheet['commonStock']) ? $balanceSheet['commonStock'] : 'Not set',
+                            'shares' => $sharesOutstanding,
+                            'result' => $bvps
+                        ];
+                    } else if (isset($balanceSheet['totalStockholdersEquity']) && 
+                              isset($balanceSheet['commonStockSharesOutstanding']) && 
+                              $balanceSheet['commonStockSharesOutstanding'] > 0) {
+                        // Try original method as fallback
+                        $bvps = $balanceSheet['totalStockholdersEquity'] / $balanceSheet['commonStockSharesOutstanding'];
+                        $bvpsSource = 'Financial Modeling Prep';
+                        
+                        $debug_bvps[] = [
+                            'source' => 'FMP (original)',
+                            'totalStockholdersEquity' => $balanceSheet['totalStockholdersEquity'],
+                            'shares' => $balanceSheet['commonStockSharesOutstanding'],
+                            'result' => $bvps
+                        ];
                     }
                 }
                 
@@ -376,6 +423,13 @@
                         if ($investedCapital > 0) {
                             $roic = $nopat / $investedCapital;
                             $roicSource = 'Alpha Vantage';
+                            
+                            $debug_roic[] = [
+                                'source' => 'Alpha Vantage',
+                                'nopat' => $nopat,
+                                'investedCapital' => $investedCapital,
+                                'result' => $roic
+                            ];
                         }
                     }
                 }
@@ -408,6 +462,9 @@
                             $nopat = 0;
                             if (isset($incomeStatement['ebit'])) {
                                 $nopat = $incomeStatement['ebit'] * (1 - $taxRate);
+                            } else if (isset($incomeStatement['netIncome'])) {
+                                // If EBIT is not available, use Net Income as a proxy
+                                $nopat = $incomeStatement['netIncome'];
                             }
                             
                             // Calculate Invested Capital
@@ -418,9 +475,16 @@
                             }
                             
                             // Calculate ROIC
-                            if ($investedCapital > 0) {
+                            if ($investedCapital > 0 && $nopat != 0) {
                                 $roic = $nopat / $investedCapital;
                                 $roicSource = 'Financial Modeling Prep';
+                                
+                                $debug_roic[] = [
+                                    'source' => 'FMP',
+                                    'nopat' => $nopat,
+                                    'investedCapital' => $investedCapital,
+                                    'result' => $roic
+                                ];
                             }
                         }
                     }
@@ -442,11 +506,11 @@
                                 <?php } ?>
                                 <div class="ms-3">
                                     <h2 class="mb-0"><?php echo htmlspecialchars($stock['companyName']); ?> (<?php echo htmlspecialchars($stock['symbol']); ?>)</h2>
-                                    <h3 class="text-<?php echo $stock['changes'] >= 0 ? 'success' : 'danger'; ?>">
+                                    <h3 class="text-<?php echo isset($stock['changes']) && $stock['changes'] >= 0 ? 'success' : 'danger'; ?>">
                                         $<?php echo number_format($stock['price'], 2); ?>
-                                        <small class="ms-2 <?php echo $stock['changes'] >= 0 ? 'text-success' : 'text-danger'; ?>">
-                                            <?php echo $stock['changes'] >= 0 ? '+' : ''; ?><?php echo number_format($stock['changes'], 2); ?> 
-                                            (<?php echo number_format($stock['changesPercentage'], 2); ?>%)
+                                        <small class="ms-2 <?php echo isset($stock['changes']) && $stock['changes'] >= 0 ? 'text-success' : 'text-danger'; ?>">
+                                            <?php echo isset($stock['changes']) ? ($stock['changes'] >= 0 ? '+' : '') . number_format($stock['changes'], 2) : '0.00'; ?> 
+                                            (<?php echo isset($stock['changesPercentage']) ? number_format($stock['changesPercentage'], 2) : '0.00'; ?>%)
                                         </small>
                                     </h3>
                                 </div>
@@ -468,7 +532,29 @@
                                                 <h5>Book Value per Share (BVPS)</h5>
                                                 <div class="ratio-value">
                                                     <?php 
-                                                    if ($bvps > 0) {
+                                                    // Debug output
+                                                    echo '<div style="text-align:left;font-size:12px;margin-bottom:10px;background:#333;padding:5px;border-radius:5px;">';
+                                                    echo '<strong>Debug BVPS:</strong><br>';
+                                                    echo 'Value: ' . $bvps . '<br>';
+                                                    echo 'Source: ' . $bvpsSource . '<br>';
+                                                    
+                                                    if (!empty($alphaVantageBalanceSheetData) && isset($alphaVantageBalanceSheetData['annualReports']) && 
+                                                        is_array($alphaVantageBalanceSheetData['annualReports']) && count($alphaVantageBalanceSheetData['annualReports']) > 0) {
+                                                        $latestReport = $alphaVantageBalanceSheetData['annualReports'][0];
+                                                        echo 'AV Total Equity: ' . (isset($latestReport['totalShareholderEquity']) ? $latestReport['totalShareholderEquity'] : 'Not set') . '<br>';
+                                                        echo 'AV Shares Out: ' . (isset($latestReport['commonStockSharesOutstanding']) ? $latestReport['commonStockSharesOutstanding'] : 'Not set') . '<br>';
+                                                    }
+                                                    
+                                                    if (!empty($balanceSheetData) && is_array($balanceSheetData) && count($balanceSheetData) > 0) {
+                                                        $balanceSheet = $balanceSheetData[0];
+                                                        echo 'FMP Total Equity: ' . (isset($balanceSheet['totalStockholdersEquity']) ? $balanceSheet['totalStockholdersEquity'] : 'Not set') . '<br>';
+                                                        echo 'FMP Common Stock: ' . (isset($balanceSheet['commonStock']) ? $balanceSheet['commonStock'] : 'Not set') . '<br>';
+                                                        echo 'FMP Shares Out: ' . (isset($balanceSheet['commonStockSharesOutstanding']) ? $balanceSheet['commonStockSharesOutstanding'] : 'Not set') . '<br>';
+                                                    }
+                                                    echo '</div>';
+                                                    
+                                                    // Simply display the value, regardless of whether it's zero
+                                                    if ($bvpsSource !== 'N/A') {
                                                         echo '<span class="h3">$' . number_format($bvps, 2) . '</span>';
                                                         echo '<div class="text-muted small">(' . $bvpsSource . ')</div>';
                                                     } else {
@@ -484,7 +570,8 @@
                                                 <h5>Debt-to-Equity Ratio</h5>
                                                 <div class="ratio-value">
                                                     <?php 
-                                                    if ($debtToEquity > 0) {
+                                                    // Simply display the value, regardless of whether it's zero  
+                                                    if ($debtToEquitySource !== 'N/A') {
                                                         echo '<span class="h3">' . number_format($debtToEquity, 2) . '</span>';
                                                         echo '<div class="text-muted small">(' . $debtToEquitySource . ')</div>';
                                                     } else {
@@ -500,8 +587,49 @@
                                                 <h5>Return on Invested Capital</h5>
                                                 <div class="ratio-value">
                                                     <?php 
-                                                    if ($roic > 0) {
-                                                        echo '<span class="h3">' . number_format($roic * 100, 2) . '%</span>';
+                                                    // Debug output
+                                                    echo '<div style="text-align:left;font-size:12px;margin-bottom:10px;background:#333;padding:5px;border-radius:5px;">';
+                                                    echo '<strong>Debug ROIC:</strong><br>';
+                                                    echo 'Value: ' . $roic . '<br>';
+                                                    echo 'Source: ' . $roicSource . '<br>';
+                                                    
+                                                    if (!empty($alphaVantageIncomeStatementData) && isset($alphaVantageIncomeStatementData['annualReports']) && 
+                                                        is_array($alphaVantageIncomeStatementData['annualReports']) && count($alphaVantageIncomeStatementData['annualReports']) > 0) {
+                                                        $incomeStatementReport = $alphaVantageIncomeStatementData['annualReports'][0];
+                                                        echo 'AV EBIT: ' . (isset($incomeStatementReport['ebit']) ? $incomeStatementReport['ebit'] : 'Not set') . '<br>';
+                                                        echo 'AV Income Tax: ' . (isset($incomeStatementReport['incomeTaxExpense']) ? $incomeStatementReport['incomeTaxExpense'] : 'Not set') . '<br>';
+                                                        echo 'AV Income Before Tax: ' . (isset($incomeStatementReport['incomeBeforeTax']) ? $incomeStatementReport['incomeBeforeTax'] : 'Not set') . '<br>';
+                                                    }
+                                                    
+                                                    if (!empty($alphaVantageBalanceSheetData) && isset($alphaVantageBalanceSheetData['annualReports']) && 
+                                                        is_array($alphaVantageBalanceSheetData['annualReports']) && count($alphaVantageBalanceSheetData['annualReports']) > 0) {
+                                                        $balanceSheetReport = $alphaVantageBalanceSheetData['annualReports'][0];
+                                                        echo 'AV Total Equity: ' . (isset($balanceSheetReport['totalShareholderEquity']) ? $balanceSheetReport['totalShareholderEquity'] : 'Not set') . '<br>';
+                                                        echo 'AV Short Term Debt: ' . (isset($balanceSheetReport['shortTermDebt']) ? $balanceSheetReport['shortTermDebt'] : 'Not set') . '<br>';
+                                                        echo 'AV Long Term Debt: ' . (isset($balanceSheetReport['longTermDebt']) ? $balanceSheetReport['longTermDebt'] : 'Not set') . '<br>';
+                                                        echo 'AV Cash: ' . (isset($balanceSheetReport['cashAndCashEquivalentsAtCarryingValue']) ? $balanceSheetReport['cashAndCashEquivalentsAtCarryingValue'] : 'Not set') . '<br>';
+                                                    }
+                                                    
+                                                    if (!empty($incomeStatementData) && is_array($incomeStatementData) && count($incomeStatementData) > 0) {
+                                                        $incomeStatement = $incomeStatementData[0];
+                                                        echo 'FMP EBIT: ' . (isset($incomeStatement['ebit']) ? $incomeStatement['ebit'] : 'Not set') . '<br>';
+                                                        echo 'FMP Income Tax: ' . (isset($incomeStatement['incomeTaxExpense']) ? $incomeStatement['incomeTaxExpense'] : 'Not set') . '<br>';
+                                                        echo 'FMP Income Before Tax: ' . (isset($incomeStatement['incomeBeforeTax']) ? $incomeStatement['incomeBeforeTax'] : 'Not set') . '<br>';
+                                                    }
+                                                    
+                                                    if (!empty($balanceSheetData) && is_array($balanceSheetData) && count($balanceSheetData) > 0) {
+                                                        $balanceSheet = $balanceSheetData[0];
+                                                        echo 'FMP Total Equity: ' . (isset($balanceSheet['totalStockholdersEquity']) ? $balanceSheet['totalStockholdersEquity'] : 'Not set') . '<br>';
+                                                        echo 'FMP Total Debt: ' . (isset($balanceSheet['totalDebt']) ? $balanceSheet['totalDebt'] : 'Not set') . '<br>';
+                                                        echo 'FMP Cash: ' . (isset($balanceSheet['cashAndCashEquivalents']) ? $balanceSheet['cashAndCashEquivalents'] : 'Not set') . '<br>';
+                                                    }
+                                                    echo '</div>';
+                                                    
+                                                    // Simply display the value, regardless of whether it's zero
+                                                    if ($roicSource !== 'N/A') {
+                                                        // Use different text color for negative ROIC
+                                                        $roicClass = $roic < 0 ? 'text-danger' : '';
+                                                        echo '<span class="h3 ' . $roicClass . '">' . number_format($roic * 100, 2) . '%</span>';
                                                         echo '<div class="text-muted small">(' . $roicSource . ')</div>';
                                                     } else {
                                                         echo '<span class="h3">N/A</span>';
@@ -525,46 +653,60 @@
                                 </div>
                                 <div class="card-body">
                                     <div class="row">
-                                        <div class="col-md-6">
-                                            <table class="table">
-                                                <tbody>
-                                                    <tr>
-                                                        <th>Company Name</th>
-                                                        <td><?php echo htmlspecialchars($stock['companyName']); ?></td>
-                                                    </tr>
-                                                    <tr>
-                                                        <th>Stock Ticker</th>
-                                                        <td><?php echo htmlspecialchars($stock['symbol']); ?></td>
-                                                    </tr>
-                                                    <tr>
-                                                        <th>Market Cap</th>
-                                                        <td><?php echo isset($stock['mktCap']) ? '$' . number_format($stock['mktCap'], 0) : 'N/A'; ?></td>
-                                                    </tr>
-                                                </tbody>
-                                            </table>
+                                        <div class="col-md-4">
+                                            <div class="ratio-card p-3 text-center">
+                                                <h5>Company Name</h5>
+                                                <div class="ratio-value">
+                                                    <span class="h4"><?php echo htmlspecialchars($stock['companyName']); ?></span>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div class="col-md-6">
-                                            <table class="table">
-                                                <tbody>
-                                                    <tr>
-                                                        <th>52 Week Range</th>
-                                                        <td><?php echo isset($stock['range']) ? htmlspecialchars($stock['range']) : 'N/A'; ?></td>
-                                                    </tr>
-                                                    <tr>
-                                                        <th>Price</th>
-                                                        <td>$<?php echo number_format($stock['price'], 2); ?></td>
-                                                    </tr>
-                                                    <tr>
-                                                        <th>Dividend Yield</th>
-                                                        <td><?php echo isset($stock['lastDiv']) ? htmlspecialchars($stock['lastDiv']) : 'N/A'; ?></td>
-                                                    </tr>
-                                                </tbody>
-                                            </table>
+                                        <div class="col-md-4">
+                                            <div class="ratio-card p-3 text-center">
+                                                <h5>Stock Ticker</h5>
+                                                <div class="ratio-value">
+                                                    <span class="h4"><?php echo htmlspecialchars($stock['symbol']); ?></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="ratio-card p-3 text-center">
+                                                <h5>Market Cap</h5>
+                                                <div class="ratio-value">
+                                                    <span class="h4"><?php echo isset($stock['mktCap']) ? '$' . number_format($stock['mktCap'], 0) : 'N/A'; ?></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row mt-3">
+                                        <div class="col-md-4">
+                                            <div class="ratio-card p-3 text-center">
+                                                <h5>52 Week Range</h5>
+                                                <div class="ratio-value">
+                                                    <span class="h5"><?php echo isset($stock['range']) ? htmlspecialchars($stock['range']) : 'N/A'; ?></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="ratio-card p-3 text-center">
+                                                <h5>Price</h5>
+                                                <div class="ratio-value">
+                                                    <span class="h4">$<?php echo number_format($stock['price'], 2); ?></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="ratio-card p-3 text-center">
+                                                <h5>Dividend Yield</h5>
+                                                <div class="ratio-value">
+                                                    <span class="h4"><?php echo isset($stock['lastDiv']) ? htmlspecialchars($stock['lastDiv']) : 'N/A'; ?></span>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                     
                                     <?php if (isset($stock['description']) && !empty($stock['description'])) { ?>
-                                    <div class="mt-3">
+                                    <div class="mt-4">
                                         <h5>About <?php echo htmlspecialchars($stock['companyName']); ?></h5>
                                         <p><?php echo htmlspecialchars($stock['description']); ?></p>
                                     </div>
@@ -608,13 +750,54 @@
                                         }
                                     }
                                     
-                                    // Display the top similar stocks
+                                    // Get company names for the top similar stocks
+                                    $stocksWithNames = [];
                                     if (count($topSimilarStocks) > 0) {
+                                        // Create batch query string
+                                        $batchSymbols = implode(',', $topSimilarStocks);
+                                        $profileBatchUrl = "https://financialmodelingprep.com/api/v3/profile/$batchSymbols?apikey=$fmpApiKey";
+                                        $profileBatchResponse = @file_get_contents($profileBatchUrl);
+                                        
+                                        if ($profileBatchResponse !== false) {
+                                            $profilesData = json_decode($profileBatchResponse, true);
+                                            
+                                            // Create mapping of symbol to company name
+                                            $symbolToName = [];
+                                            if (!empty($profilesData) && is_array($profilesData)) {
+                                                foreach ($profilesData as $profile) {
+                                                    if (isset($profile['symbol']) && isset($profile['companyName'])) {
+                                                        $symbolToName[$profile['symbol']] = $profile['companyName'];
+                                                    }
+                                                }
+                                            }
+                                            
+                                            // Now create the final array with both symbol and name
+                                            foreach ($topSimilarStocks as $stockSymbol) {
+                                                $companyName = isset($symbolToName[$stockSymbol]) ? $symbolToName[$stockSymbol] : 'Unknown';
+                                                $stocksWithNames[] = [
+                                                    'symbol' => $stockSymbol,
+                                                    'name' => $companyName
+                                                ];
+                                            }
+                                        } else {
+                                            // If batch request fails, just use symbols
+                                            foreach ($topSimilarStocks as $stockSymbol) {
+                                                $stocksWithNames[] = [
+                                                    'symbol' => $stockSymbol,
+                                                    'name' => 'Unknown'
+                                                ];
+                                            }
+                                        }
+                                    }
+                                    
+                                    // Display the top similar stocks
+                                    if (count($stocksWithNames) > 0) {
                                         echo '<ul class="list-group">';
-                                        foreach ($topSimilarStocks as $alias) {
+                                        foreach ($stocksWithNames as $stock) {
                                             echo '<li class="list-group-item alias-item">';
-                                            echo '<a href="?symbol=' . htmlspecialchars($alias) . '" class="d-block p-2 text-decoration-none">';
-                                            echo '<i class="fas fa-external-link-alt me-2"></i>' . htmlspecialchars($alias);
+                                            echo '<a href="?symbol=' . htmlspecialchars($stock['symbol']) . '" class="d-block p-2 text-decoration-none">';
+                                            echo '<i class="fas fa-external-link-alt me-2"></i>' . htmlspecialchars($stock['symbol']);
+                                            echo ' <small class="text-muted">(' . htmlspecialchars($stock['name']) . ')</small>';
                                             echo '</a></li>';
                                         }
                                         echo '</ul>';
@@ -703,7 +886,7 @@
                     if (loadingSection) loadingSection.style.display = 'none';
                     if (contentSection) contentSection.style.display = 'block';
                     clearInterval(tipInterval);
-                }, 2000);
+                }, 5500);
             }
         });
     </script>
