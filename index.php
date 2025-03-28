@@ -131,7 +131,50 @@
         
         footer {
             background-color: var(--darker-bg) !important;
-            color: var(--text-muted);
+            border-top: 1px solid var(--border-color);
+            padding: 20px 0;
+            margin-top: 50px;
+        }
+        
+        .footer-credits {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .footer-brand {
+            font-weight: 700;
+            font-size: 1.2rem;
+            margin-bottom: 10px;
+        }
+        
+        .footer-api-logos {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        
+        .footer-api-logo {
+            height: 25px;
+            opacity: 0.8;
+            transition: opacity 0.3s;
+        }
+        
+        .footer-api-logo:hover {
+            opacity: 1;
+        }
+        
+        @media (max-width: 767px) {
+            .footer-credits {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .footer-api-logos {
+                margin-top: 15px;
+                justify-content: center;
+            }
         }
         
         /* Loading spinner */
@@ -831,6 +874,33 @@
             ?>
         </div>
     </div>
+    
+    <footer>
+        <div class="container">
+            <div class="footer-credits">
+                <div>
+                    <div class="footer-brand">
+                        <i class="fas fa-chart-line me-2"></i>CheckMyStock
+                    </div>
+                    <p class="text-muted mb-0">
+                        &copy; <?php echo date('Y'); ?> | Developed by Ahimsa GMS
+                    </p>
+                </div>
+                <div>
+                    <p class="text-muted mb-2">Data provided by:</p>
+                    <div class="footer-api-logos">
+                        <a href="https://financialmodelingprep.com/" target="_blank" title="Financial Modeling Prep">
+                            <span class="text-muted">Financial Modeling Prep</span>
+                        </a>
+                        <span class="text-muted mx-2">|</span>
+                        <a href="https://www.alphavantage.co/" target="_blank" title="Alpha Vantage">
+                            <span class="text-muted">Alpha Vantage</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <script>
