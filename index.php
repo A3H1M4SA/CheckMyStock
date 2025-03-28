@@ -243,6 +243,44 @@
             transform: scale(1.1);
             box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
         }
+        
+        .share-buttons {
+            display: flex;
+            gap: 10px;
+            margin-left: auto;
+        }
+        
+        .share-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            transition: all 0.3s;
+            color: white;
+        }
+        
+        .share-icon:hover {
+            transform: scale(1.1);
+        }
+        
+        .share-whatsapp {
+            background-color: #25D366;
+        }
+        
+        .share-facebook {
+            background-color: #3b5998;
+        }
+        
+        .share-email {
+            background-color: #D44638;
+        }
+        
+        .share-instagram {
+            background: linear-gradient(45deg, #405DE6, #5851DB, #833AB4, #C13584, #E1306C, #FD1D1D, #F56040, #F77737, #FCAF45, #FFDC80);
+        }
     </style>
 </head>
 <body>
@@ -499,6 +537,56 @@
                                         </small>
                                     </h3>
                                 </div>
+                                
+                                <?php 
+                                // Share buttons - prepare share data
+                                $shareTitle = $stock['companyName'] . ' (' . $stock['symbol'] . ')';
+                                $sharePrice = '$' . number_format($stock['price'], 2);
+                                $shareChange = (isset($stock['changes']) && $stock['changes'] >= 0 ? '+' : '') . number_format(isset($stock['changes']) ? $stock['changes'] : 0, 2) . ' (' . number_format(isset($stock['changesPercentage']) ? $stock['changesPercentage'] : 0, 2) . '%)';
+                                
+                                // Build financial ratios part if available
+                                $shareRatios = "";
+                                if ($bvpsSource !== 'N/A') {
+                                    $shareRatios .= "BVPS: $" . number_format($bvps, 2) . " | ";
+                                }
+                                if ($debtToEquitySource !== 'N/A') {
+                                    $shareRatios .= "D/E: " . number_format($debtToEquity, 2) . " | ";
+                                }
+                                if ($roicSource !== 'N/A') {
+                                    $shareRatios .= "ROIC: " . number_format($roic * 100, 2) . "% | ";
+                                }
+                                $shareRatios = rtrim($shareRatios, " | ");
+                                
+                                // Build the share text
+                                $shareText = "Check out " . $shareTitle . " trading at " . $sharePrice . " " . $shareChange;
+                                if (!empty($shareRatios)) {
+                                    $shareText .= "\n" . $shareRatios;
+                                }
+                                $shareText .= "\n\nAnalyzed with CheckMyStock - The simple stock analyzer!";
+                                
+                                // Current URL
+                                $currentUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
+                                
+                                // Share URLs
+                                $whatsappUrl = "https://wa.me/?text=" . urlencode($shareText . "\n\n" . $currentUrl);
+                                $facebookUrl = "https://www.facebook.com/sharer/sharer.php?u=" . urlencode($currentUrl) . "&quote=" . urlencode($shareText);
+                                $emailSubject = "Check out this stock: " . $shareTitle;
+                                $emailUrl = "mailto:?subject=" . urlencode($emailSubject) . "&body=" . urlencode($shareText . "\n\n" . $currentUrl);
+                                ?>
+                                <div class="share-buttons">
+                                    <a href="<?php echo $whatsappUrl; ?>" target="_blank" class="share-icon share-whatsapp" title="Share via WhatsApp">
+                                        <i class="fab fa-whatsapp"></i>
+                                    </a>
+                                    <a href="<?php echo $facebookUrl; ?>" target="_blank" class="share-icon share-facebook" title="Share via Facebook">
+                                        <i class="fab fa-facebook-f"></i>
+                                    </a>
+                                    <a href="<?php echo $emailUrl; ?>" class="share-icon share-email" title="Share via Email">
+                                        <i class="fas fa-envelope"></i>
+                                    </a>
+                                    <a href="#" onclick="copyToClipboard('<?php echo addslashes($shareText . "\n\n" . $currentUrl); ?>')" class="share-icon share-instagram" title="Copy for Instagram">
+                                        <i class="fab fa-instagram"></i>
+                                    </a>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -744,50 +832,6 @@
         </div>
     </div>
     
-    <!-- WhatsApp Share Button -->
-    <?php if (isset($symbol) && !empty($profileData)) { 
-        $stock = $profileData[0];
-        $shareTitle = $stock['companyName'] . ' (' . $stock['symbol'] . ')';
-        $sharePrice = '$' . number_format($stock['price'], 2);
-        $shareChange = ($stock['changes'] >= 0 ? '+' : '') . number_format($stock['changes'], 2) . ' (' . number_format(isset($stock['changesPercentage']) ? $stock['changesPercentage'] : 0, 2) . '%)';
-        
-        // Build financial ratios part if available
-        $shareRatios = "";
-        if ($bvpsSource !== 'N/A') {
-            $shareRatios .= "BVPS: $" . number_format($bvps, 2) . " | ";
-        }
-        if ($debtToEquitySource !== 'N/A') {
-            $shareRatios .= "D/E: " . number_format($debtToEquity, 2) . " | ";
-        }
-        if ($roicSource !== 'N/A') {
-            $shareRatios .= "ROIC: " . number_format($roic * 100, 2) . "% | ";
-        }
-        $shareRatios = rtrim($shareRatios, " | ");
-        
-        // Build the share text
-        $shareText = "Check out " . $shareTitle . " trading at " . $sharePrice . " " . $shareChange;
-        if (!empty($shareRatios)) {
-            $shareText .= "\n" . $shareRatios;
-        }
-        $shareText .= "\n\nAnalyzed with CheckMyStock - The simple stock analyzer!";
-        
-        // Current URL with symbol
-        $currentUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
-        
-        // Final share URL for WhatsApp
-        $shareUrl = "https://wa.me/?text=" . urlencode($shareText . "\n\n" . $currentUrl);
-    ?>
-    <a href="<?php echo $shareUrl; ?>" target="_blank" class="share-btn" title="Share via WhatsApp">
-        <i class="fab fa-whatsapp"></i>
-    </a>
-    <?php } ?>
-    
-    <footer class="bg-light mt-5 py-3 text-center">
-        <div class="container">
-            <p class="text-muted mb-0">CheckMyStock &copy; <?php echo date('Y'); ?> | Data provided by Financial Modeling Prep</p>
-        </div>
-    </footer>
-
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -813,9 +857,25 @@
             function showRandomTip() {
                 const randomTip = tips[Math.floor(Math.random() * tips.length)];
                 if (loadingTips) {
-                    loadingTips.innerHTML = `<div class="alert alert-info"><i class="fas fa-lightbulb me-2"></i>${randomTip}</div>`;
+                    loadingTips.innerHTML = `<div class="alert alert-info mb-0"><i class="fas fa-lightbulb me-2"></i>${randomTip}</div>`;
                 }
             }
+            
+            // Function to copy text to clipboard for Instagram sharing
+            window.copyToClipboard = function(text) {
+                navigator.clipboard.writeText(text).then(function() {
+                    alert('Stock info copied! You can now paste it in Instagram.');
+                }, function() {
+                    // Fallback for browsers that don't support clipboard API
+                    const textArea = document.createElement('textarea');
+                    textArea.value = text;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                    alert('Stock info copied! You can now paste it in Instagram.');
+                });
+            };
             
             // If there's a form submission
             if (stockForm) {
