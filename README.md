@@ -4,6 +4,10 @@
 
 🌐 **Live Demo:** [checkmystock.gmsahimsa.com](https://checkmystock.gmsahimsa.com)
 
+
+<img width="1906" alt="image" src="https://github.com/user-attachments/assets/cf91912a-a0fa-47c7-908a-d68aa3518231" />
+
+
 ---
 
 ## 🚀 Features
@@ -77,5 +81,5 @@
 ### 🧑‍💻 Steps
 1. Clone the repo:
    ```bash
-   git clone https://github.com/yourusername/CheckMyStock.git
+   git clone https://github.com/A3H1M4SA/CheckMyStock.git
    cd CheckMyStock
