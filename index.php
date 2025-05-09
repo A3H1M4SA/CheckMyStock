@@ -426,8 +426,8 @@
             <?php
             if (isset($_GET['symbol'])) {
                 $symbol = strtoupper(trim($_GET['symbol']));
-                $fmpApiKey = 'TS7dAXGizXA4HhENFsDpWK3jpvZWuNM1'; // Financial Modeling Prep API key
-                $alphaVantageApiKey = 'Z8027PQP429B5SMI'; // Alpha Vantage API key
+                $fmpApiKey = 'YOUR_KEY'; // Financial Modeling Prep API key
+                $alphaVantageApiKey = 'YOUR_KEY'; // Alpha Vantage API key
                 
                 // Get stock profile information from FMP
                 $profileUrl = "https://financialmodelingprep.com/api/v3/profile/$symbol?apikey=$fmpApiKey";
@@ -933,7 +933,7 @@
             <?php
             // Define the API key if not already defined
             if (!isset($fmpApiKey)) {
-                $fmpApiKey = "TS7dAXGizXA4HhENFsDpWK3jpvZWuNM1";
+                $fmpApiKey = "YOUR_API_KEY";
             }
             
             $mostActiveUrl = "https://financialmodelingprep.com/api/v3/stock_market/actives?apikey=" . $fmpApiKey;
